@@ -1,0 +1,343 @@
+---
+title: "Titanic Analysis"
+author: "S Wajahat Ali"
+date: "5/7/2020"
+output: html_document
+---
+This analysis attempts to predict the survival of the Titanic passengers. In order to do this, I will use the different features available about the passengers, use a subset of the data to train an algorithm and then run the algorithm on the rest of the data set to get a prediction.
+
+First all the missing values are found and all irrelavent variables are removed from the dataset. After cleaning the data visual analysis is done to find out the relationship between different features and Survival.Then, different forecating techniques are used to predict the survival of a passenger. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+library(forecast)
+library(neuralnet)
+library(e1071)
+library(plotly)
+library(reshape)
+library(GGally)
+library(Amelia)
+library(caret)
+library(ggplot2)
+setwd("C:/Users/student/Desktop/R/titanic")
+```
+
+## Data loading and cleaning
+    
+    Reading Data
+```{r}
+train = read.csv("train.csv", stringsAsFactors = FALSE)
+test = read.csv("test.csv", stringsAsFactors = FALSE)
+```
+
+    matching columns number on both sets of data
+
+```{r}
+test$Survived = NA
+```
+    
+    creating a new dataset 'full' by combining both test and train
+
+```{r}
+full = rbind(test, train)
+```
+
+    summary of the data
+```{r}
+summary(full)
+
+```
+
+    looking at possibe features which can be converted to factors.
+```{r}
+apply(full,2, function(x) length(unique(x)))
+
+```
+
+    Converting the features Survived, Pclass, Sex and Embarked to factors
+```{r}
+
+cols<-c("Survived","Pclass","Sex","Embarked")
+for (i in cols){
+  full[,i] <- as.factor(full[,i])
+}
+
+```
+
+    looking for any Missing values
+```{r}
+missmap(full)
+```
+
+    Age and Fare have NAs
+```{r}
+colSums(is.na(full))
+```
+
+    Cabin and Embarked have empty strings
+```{r}
+colSums(full=="")
+
+```
+
+##Cleaning Data
+
+  Ticket seems to have random aplpha numeric code so it will be removed 
+  Cabin has a lot of missing values so we will remove it too
+  Name and PassengerId will also be removed, as they dont have any significant
+  effect on Survived.
+      
+Removing Unwanted Variable
+```{r}
+full = subset( full, select = -c(Cabin,Ticket,Name, PassengerId))
+```
+
+
+Filling out NAs and other missing values
+
+     assigning the mode of emabarked to missing embarked
+
+```{r}
+full[full$Embarked == '',"Embarked"] = "S" 
+```
+
+    assigning mean of fare to the missing values
+
+```{r}
+full[is.na(full$Fare),"Fare"] = mean(full$Fare, na.rm = TRUE) 
+
+```
+
+    finding out missing age through SVM
+```{r}
+# splitting the data into two data sets  
+have_age = subset(full,is.na(Age) == FALSE)
+predict_age = subset(full, is.na(Age) == TRUE )
+
+smp_size <- floor(0.80 * nrow(have_age))
+train_ind <- sample(seq_len(nrow(have_age)), size = smp_size)
+train_age <- have_age[train_ind, ]
+test_age <- have_age[-train_ind,]
+
+# since Age has NAs we will not pass it in our train data set 
+svm_model_age = svm(Age~Pclass+Sex+SibSp+Parch+Fare+Embarked, data = subset(train_age, select = -Survived ),
+                             type = "eps-regression", kernel = "radial")
+
+
+test_age$age_predicted = predict(svm_model_age, subset(test_age, select = -Survived ))
+accuracy(test_age$Age, test_age$age_predicted)
+```
+
+    predicting age
+```{r}
+predict_age$Age = predict(svm_model_age, subset(predict_age, select = -c(Age,Survived) ))
+```
+
+    combining the two data, full1 doesnt have any missing value.
+```{r}
+full1 = rbind(have_age, predict_age)
+
+```
+
+    looking for any Missing values
+```{r}
+colSums(is.na(full1))
+# only Age has NAs as expected
+
+```
+
+
+```{r}
+colSums(full1=="")
+# no empty strings found
+
+```
+
+*we have a clean data set now*
+
+    dividing the data into two sets
+```{r}
+have_survived = subset(full1,is.na(Survived) == FALSE)
+predict_survived = subset(full1, is.na(Survived) == TRUE )
+```
+## Visual Analysis
+
+    Analyzing the role of gender in Survival
+```{r}
+ggplot(have_survived,aes(x=Sex,fill=Survived))+
+  geom_bar(position = "fill")+
+  ylab("Frequency")
+# a female has more chances of surviving compare to a male
+```
+
+    Analyzing the role of Pclass in Survival
+```{r}
+
+ggplot(have_survived,aes(x=Pclass,fill=Survived))+
+  geom_bar(position = "fill")+
+  ylab("Frequency")
+# chances of survival are higher in class 1 and least in class 3
+
+```
+
+
+    looking at gender classwise
+```{r}
+ggplot(data = have_survived,aes(x=Pclass,fill=Survived))+
+  geom_bar(position="fill")+
+  facet_wrap(~Sex)
+# a female has higher chances of survival compared to a man regardless of class 
+```
+
+     Analyzing the role of Sibsp in Survival
+```{r}
+ggplot(have_survived,aes(x=SibSp,fill=Survived))+geom_bar()
+
+```
+
+    Analyzing the role of Parch in Survival
+```{r}
+ggplot(have_survived,aes(x=Parch,fill=Survived))+geom_bar()
+```
+
+*parch and SibSp seems to have similar impact on survivor*
+*but we are not sure if SibSp 0 corresponds to same passenger in Parch 0*
+
+    Analyzing the role of Embarked in Survival
+```{r}
+
+ggplot(have_survived,aes(x=Embarked,fill=Survived))+
+  geom_bar(position = "fill")+
+  ylab("Frequency")
+# S and Q have little below 50% survived
+# C has a little above 50% survived
+
+```
+
+Analyzing the role of Age in Survival
+```{r, warning = FALSE}
+ggplot(data = have_survived,aes(x=Age,fill=Survived))+
+  geom_histogram(binwidth = 3,position="fill")+
+  ylab("Frequency")
+# Children aged below 15 and old people aged above 80 have more chances of survival
+
+```
+
+    Analyzing the role of Fare in Survival
+
+```{r, warning= FALSE}
+
+ggplot(data = have_survived,aes(x=Fare,fill=Survived))+
+  geom_histogram(binwidth =20, position="fill")
+# chances of survival increase with increasing fare
+
+```
+
+
+
+
+```{r,warning= FALSE}
+ggplot(data = have_survived,aes(x=Fare,fill=Pclass))+
+  geom_histogram(binwidth =20, position="fill")
+# class one has the highest fare and, class 3 has least
+```
+
+
+## Predicting
+      
+      dividing have_survived into test and train
+
+```{r}
+smp_size <- floor(0.80 * nrow(have_survived))
+train_ind <- sample(seq_len(nrow(have_survived)), size = smp_size)
+train_survived <- have_survived[train_ind, ]
+test_survived <- have_survived[-train_ind,]
+
+```
+
+
+## Predicting with glm
+
+```{r}
+glm_model_survived = glm(Survived~.,family = "binomial",
+                         data = train_survived)
+test_survived$predicted_survived = predict(glm_model_survived,test_survived)
+test_survived$predicted_survived = ifelse(test_survived$predicted_survived > 0.5,1,0)
+test_survived$predicted_survived = as.factor(test_survived$predicted_survived)
+confusionMatrix(test_survived$predicted_survived,test_survived$Survived)
+# Accuracy = 84.92%
+```
+
+
+## Predictiing with SVM
+
+```{r}
+svm_model_survived = svm(Survived~., data = train_survived,
+                    type = "C-classification", kernel = "radial")
+
+test_survived$predicted_survived = predict(svm_model_survived,test_survived)
+confusionMatrix(test_survived$predicted_survived,test_survived$Survived)
+# Accuracy = 86.03%
+```
+
+
+    using the most accurate of the models above to predict
+```{r}
+# we will not pass Survived as it has NAs 
+predict_survived$Survived = predict(svm_model_survived,subset(predict_survived, 
+                                                              select = -Survived ))
+
+```
+
+
+
+## Visual Analysis of the Predicted Data
+
+    Analyzing the role of gender wrt predicted Survived
+```{r, warning= FALSE}
+
+ggplot(predict_survived,aes(x=Sex,fill=Survived))+
+  geom_bar(position="fill")+
+  ylab("Frequency")
+# as expected a female has more chances of survival compare to a male
+
+```
+
+    Analyzing the role of Pclass wrt predicted Survived
+```{r, warning= FALSE}
+ggplot(predict_survived,aes(x=Pclass,fill=Survived))+
+  geom_bar(position = "fill")+
+  ylab("Frequency")
+# as expected chances of survival are higher in class 1 and least in class 3
+```
+
+
+    looking at gender classwise
+```{r, warning= FALSE}
+ggplot(data = predict_survived,aes(x=Pclass,fill=Survived))+
+  geom_bar(position="fill")+
+  facet_wrap(~Sex)
+# as expected a female has higher chances of survival compared to a man regardless of class 
+```
+
+
+    Analyzing the role of Age wrt predicted Survived
+```{r, warning= FALSE}
+ggplot(data = predict_survived,aes(x=Age,fill=Survived))+
+  geom_histogram(binwidth = 3,position="fill")+
+  ylab("Frequency")
+# As expected Children and old people have higher chances of survival
+
+
+```
+
+    Analyzing the role of Fare wrt predicted Survived
+```{r, warning= FALSE}
+ggplot(data = predict_survived,aes(x=Fare,fill=Survived))+
+  geom_histogram(binwidth =20, position="fill")
+# as expected chances of survival are higher for higher fare
+
+```
+
+

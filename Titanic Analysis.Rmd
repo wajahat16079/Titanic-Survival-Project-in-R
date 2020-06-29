@@ -2,14 +2,16 @@
 title: "Titanic Analysis"
 author: "S Wajahat Ali"
 date: "5/7/2020"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 This analysis attempts to predict the survival of the Titanic passengers. In order to do this, I will use the different features available about the passengers, use a subset of the data to train an algorithm and then run the algorithm on the rest of the data set to get a prediction.
 
 First all the missing values are found and all irrelavent variables are removed from the dataset. After cleaning the data visual analysis is done to find out the relationship between different features and Survival.Then, different forecating techniques are used to predict the survival of a passenger. 
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, include=FALSE, warning = FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
 rm(list = ls())
 library(forecast)
 library(neuralnet)
@@ -20,7 +22,7 @@ library(GGally)
 library(Amelia)
 library(caret)
 library(ggplot2)
-setwd("C:/Users/student/Desktop/R/titanic")
+setwd("C:/Users/user/Desktop/titanic")
 ```
 
 ## Data loading and cleaning
